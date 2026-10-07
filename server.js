@@ -98,6 +98,7 @@ app.get("/", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
+    version: "1.1.0",
     uptimeSeconds: Math.round(process.uptime()),
     time: new Date().toISOString(),
   });
@@ -153,12 +154,17 @@ app.get("/api/telemetry", (req, res) => {
     return res.status(401).json({ ok: false, error: "unauthorized" });
   }
   const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 1000);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
   const records = loadRecords();
+  // offset counts back from the newest record, so offset=0 returns the latest `limit` records
+  const end = Math.max(records.length - offset, 0);
+  const start = Math.max(end - limit, 0);
   res.json({
     ok: true,
     total: records.length,
-    returned: Math.min(limit, records.length),
-    records: records.slice(-limit),
+    offset,
+    returned: end - start,
+    records: records.slice(start, end),
   });
 });
 

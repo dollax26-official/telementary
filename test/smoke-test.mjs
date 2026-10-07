@@ -112,6 +112,38 @@ try {
     JSON.stringify(data).slice(0, 160)
   );
 
+  const page1 = await fetch(`${BASE}/api/telemetry?limit=1&offset=0`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+  const page1Data = await page1.json();
+  check(
+    "supports limit/offset pagination",
+    page1.status === 200 &&
+      page1Data.total === 3 &&
+      page1Data.offset === 0 &&
+      page1Data.returned === 1,
+    JSON.stringify(page1Data).slice(0, 160)
+  );
+
+  const page2 = await fetch(`${BASE}/api/telemetry?limit=1&offset=2`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+  const page2Data = await page2.json();
+  check(
+    "offset skips the newest records",
+    page2.status === 200 && page2Data.returned === 1,
+    JSON.stringify(page2Data).slice(0, 160)
+  );
+
+  const page3 = await fetch(`${BASE}/api/telemetry?limit=10&offset=100`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+  });
+  const page3Data = await page3.json();
+  check(
+    "offset beyond the window returns an empty page",
+    page3.status === 200 && page3Data.returned === 0 && page3Data.records.length === 0
+  );
+
   const badJson = await fetch(`${BASE}/api/telemetry`, {
     method: "POST",
     headers: {

@@ -4,4 +4,5 @@ npm-debug.log*
 .env.local
 data/telemetry.json
 data/*.tmp
+local-data/
 .DS_Store

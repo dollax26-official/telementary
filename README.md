@@ -16,7 +16,7 @@ Minecraft + Fern  ──POST /api/telemetry──▶  Telementary (Railway)  ─
 | `GET`  | `/`                        | –    | Service info                                    |
 | `GET`  | `/api/health`              | –    | Health check — `{ "status": "ok" }`             |
 | `POST` | `/api/telemetry`           | ✔    | Store one record (object) or a batch (array)    |
-| `GET`  | `/api/telemetry?limit=100` | ✔    | Read the most recent stored records             |
+| `GET`  | `/api/telemetry?limit=100&offset=0` | ✔ | Read records (`offset` skips back from the newest) |
 
 **Auth:** every `/api/telemetry` request must include your secret token, sent either as
 `Authorization: Bearer <token>`, `x-telemetry-token: <token>`, or `x-api-key: <token>`.
@@ -92,15 +92,37 @@ npm test                                    # self-contained smoke test
 
 On Windows PowerShell: `$env:TELEMETRY_TOKEN="dev-secret"; npm start`
 
+## Local backup (sync to your PC)
+
+`sync.js` downloads **everything** from your Railway server and stores it on this computer:
+
+- `local-data/telemetry.json` — the full local archive (de-duplicated)
+- `local-data/viewer.html` — a readable page showing all sessions and commands
+
+Run it any time — with `npm run sync` or by double-clicking `sync.bat` (Windows).
+
+Setup: add your server address to `.env`:
+
+```
+SYNC_SERVER_URL=https://YOUR-APP.up.railway.app
+TELEMETRY_TOKEN=<same secret as in Railway>
+```
+
+On Windows you can also schedule `sync-silent.bat` in Task Scheduler to get automatic backups.
+
 ## Project structure
 
 ```
 telementary/
 ├── server.js           # the whole API (Express, ~180 lines)
+├── sync.js             # local backup tool: Railway -> this PC
+├── sync.bat            # double-click to run the backup (Windows)
+├── sync-silent.bat     # silent version for Task Scheduler
 ├── test/smoke-test.mjs # self-contained endpoint tests
 ├── railway.json        # Railway deploy config (healthcheck, restart policy)
 ├── .env.example        # environment variable template
-└── data/               # JSON storage (git-ignored)
+├── data/               # JSON storage (git-ignored)
+└── local-data/         # local backup output (git-ignored)
 ```
 
 ## Environment variables
@@ -124,4 +146,4 @@ telementary/
 
 - [ ] Fern-side uploader (HTTPS POST from the mod on join / leave / command)
 - [ ] `singlePlayerWorlds` metadata in the mod
-- [ ] Simple dashboard to view activity
+- [x] Local backup + viewer (`sync.js` → `local-data/viewer.html`)
