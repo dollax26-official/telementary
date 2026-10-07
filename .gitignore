@@ -1,0 +1,7 @@
+node_modules/
+npm-debug.log*
+.env
+.env.local
+data/telemetry.json
+data/*.tmp
+.DS_Store
