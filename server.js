@@ -35,6 +35,37 @@ const MAX_RECORDS =
 
 const app = express();
 
+
+/* CORS support for the Fern Android app */
+app.use((req, res, next) => {
+  const origin = req.get("Origin");
+
+  // Only allow the local origins used by the app.
+  if (
+    origin === "https://localhost" ||
+    origin === "http://localhost"
+  ) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET, POST, OPTIONS"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type"
+    );
+  }
+
+  // Preflight requests must not require the API token.
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+
 app.set("trust proxy", 1);
 
 app.use(
