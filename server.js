@@ -70,7 +70,7 @@ app.set("trust proxy", 1);
 
 app.use(
   express.json({
-    limit: "256kb",
+    limit: "1mb",
   })
 );
 
@@ -324,7 +324,7 @@ app.get("/", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    version: "2.0.0",
+    version: "2.1.0",
     uptimeSeconds:
       Math.round(process.uptime()),
     time: new Date().toISOString(),

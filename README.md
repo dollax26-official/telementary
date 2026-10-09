@@ -29,20 +29,52 @@ Fern's local `activity.json` is already in the right shape — POST it as-is:
 {
   "player": "Player786",
   "uuid": "8280f006-3f61-3ece-adfd-8952041aff70",
-  "minecraftVersion": "Fabric",
+  "minecraftVersion": "1.21.11",
+  "singlePlayerWorlds": [
+    {
+      "name": "New World",
+      "gameMode": "survival",
+      "hardcore": false,
+      "firstPlayed": "2026-10-07T15:22:57Z",
+      "lastPlayed": "2026-10-09T18:04:11Z"
+    }
+  ],
   "sessions": [
     {
       "server": "example.com",
       "joined": "2026-10-07T15:22:57Z",
       "commands": [{ "time": "2026-10-07T15:23:01Z", "command": "/help" }],
+      "chats": [
+        { "time": "2026-10-07T15:23:10Z", "direction": "sent", "message": "hello" },
+        { "time": "2026-10-07T15:23:40Z", "direction": "received", "sender": "Alex", "message": "hi Player786" }
+      ],
       "left": "2026-10-07T15:24:04Z"
+    },
+    {
+      "server": "local:E:a12b9bf3",
+      "singleplayer": true,
+      "world": { "name": "New World", "gameMode": "survival", "hardcore": false },
+      "joined": "2026-10-08T10:00:00Z",
+      "commands": [],
+      "chats": [],
+      "left": "2026-10-08T10:31:22Z"
     }
   ]
 }
 ```
 
-The server accepts **any JSON object or array** and does not validate the schema, so future
-fields — like `singlePlayerWorlds` metadata — work without any server changes.
+### Telemetry fields
+
+| Field | Where | Meaning |
+| --- | --- | --- |
+| `sessions[].commands` | per session | Commands the player ran |
+| `sessions[].chats` | per session | Chat messages. `direction` is `sent` or `received`; `sender` is set for received messages |
+| `sessions[].singleplayer` + `sessions[].world` | single-player sessions | World name, game mode and hardcore flag of the integrated-server world |
+| `singlePlayerWorlds` | root | Summary of every single-player world the mod user has opened |
+
+The server accepts **any JSON object or array** and stores it as-is, so newer Fern builds
+can add fields without any server changes. Fern v0.2+ sends chat logs and single-player
+world metadata; the JSON body limit is 1 MB so chat-heavy activity files fit comfortably.
 
 ## Quick test
 
@@ -144,6 +176,6 @@ telementary/
 
 ## Roadmap
 
-- [ ] Fern-side uploader (HTTPS POST from the mod on join / leave / command)
-- [ ] `singlePlayerWorlds` metadata in the mod
+- [x] Fern-side uploader (HTTPS POST from the mod on join / leave / command / chat)
+- [x] `singlePlayerWorlds` + chat logs in the mod
 - [x] Local backup + viewer (`sync.js` → `local-data/viewer.html`)
