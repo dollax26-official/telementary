@@ -29,6 +29,8 @@ const DATA_DIR =
 
 const DATA_FILE = path.join(DATA_DIR, "telemetry.json");
 const DEVICES_FILE = path.join(DATA_DIR, "devices.json");
+const WORLD_DIR = path.join(DATA_DIR, "worlds");
+const WORLDS_FILE = path.join(DATA_DIR, "worlds.json");
 
 const MAX_RECORDS =
   Number(process.env.MAX_RECORDS) || 5000;
@@ -79,6 +81,7 @@ app.use(
 fs.mkdirSync(DATA_DIR, {
   recursive: true,
 });
+fs.mkdirSync(WORLD_DIR, { recursive: true });
 
 if (!fs.existsSync(DATA_FILE)) {
   fs.writeFileSync(
@@ -94,6 +97,10 @@ if (!fs.existsSync(DEVICES_FILE)) {
     "[]\n",
     "utf8"
   );
+}
+
+if (!fs.existsSync(WORLDS_FILE)) {
+  fs.writeFileSync(WORLDS_FILE, "[]\n", "utf8");
 }
 
 function loadJsonFile(file) {
@@ -150,6 +157,23 @@ function saveDevices(devices) {
     DEVICES_FILE,
     devices
   );
+}
+
+function loadWorlds() {
+  return loadJsonFile(WORLDS_FILE);
+}
+
+function saveWorlds(worlds) {
+  saveJsonFile(WORLDS_FILE, worlds);
+}
+
+function safeWorldName(value) {
+  const name = String(value || "Minecraft World").trim().slice(0, 80);
+  return name.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").replace(/\.+$/g, "") || "Minecraft World";
+}
+
+function worldSlug(value) {
+  return safeWorldName(value).replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "world";
 }
 
 /* ------------------------------------------------------------------ auth */
@@ -377,6 +401,10 @@ app.post("/api/register", (req, res) => {
       ? body.minecraftVersion
       : "unknown";
 
+  const uuid = typeof body.uuid === "string" && body.uuid.length <= 64
+    ? body.uuid
+    : "";
+
   const devices = loadDevices();
 
   /*
@@ -404,6 +432,7 @@ app.post("/api/register", (req, res) => {
     deviceId,
     token,
     username,
+    uuid,
     minecraftVersion,
     registeredAt:
       new Date().toISOString(),
@@ -664,6 +693,9 @@ app.get("/api/devices", (req, res) => {
       username:
         device.username,
 
+      uuid:
+        device.uuid || null,
+
       minecraftVersion:
         device.minecraftVersion,
 
@@ -684,6 +716,103 @@ app.get("/api/devices", (req, res) => {
     devices:
       safeDevices,
   });
+});
+
+
+/* ---------------------------------------------------------- world backups */
+
+/*
+ * World archive uploads are disabled unless the client explicitly opts in.
+ * The client token identifies the owner; the master token is read-only here.
+ * Keep DATA_DIR on a Railway persistent volume if backups must survive deploys.
+ */
+app.post(
+  "/api/worlds",
+  express.raw({ type: ["application/zip", "application/x-zip-compressed"], limit: "100mb" }),
+  (req, res) => {
+    const authorization = getTelemetryAuthorization(req);
+    if (!authorization || authorization.type !== "device" || !authorization.device) {
+      return res.status(401).json({ ok: false, error: "device token required" });
+    }
+    if (req.get("x-world-backup-consent") !== "true") {
+      return res.status(403).json({ ok: false, error: "world backup consent is required" });
+    }
+    if (!Buffer.isBuffer(req.body) || req.body.length < 4) {
+      return res.status(400).json({ ok: false, error: "upload must be a ZIP archive" });
+    }
+    const signature = req.body.subarray(0, 4).toString("hex");
+    if (!["504b0304", "504b0506", "504b0708"].includes(signature)) {
+      return res.status(415).json({ ok: false, error: "upload is not a valid ZIP archive" });
+    }
+
+    const device = authorization.device;
+    const worldName = safeWorldName(req.get("x-world-name") || "Minecraft World");
+    const player = String(req.get("x-minecraft-username") || device.username || "unknown").trim().slice(0, 64);
+    const id = crypto.randomUUID();
+    const archiveFile = id + ".zip";
+    const archivePath = path.join(WORLD_DIR, archiveFile);
+
+    try {
+      fs.writeFileSync(archivePath, req.body, { flag: "wx" });
+      const worlds = loadWorlds();
+      const metadata = {
+        id,
+        deviceId: device.deviceId,
+        player,
+        uuid: device.uuid || null,
+        worldName,
+        uploadedAt: new Date().toISOString(),
+        sizeBytes: req.body.length,
+        archiveFile
+      };
+      worlds.push(metadata);
+      saveWorlds(worlds);
+      return res.status(201).json({
+        ok: true,
+        world: {
+          id: metadata.id,
+          player: metadata.player,
+          worldName: metadata.worldName,
+          uploadedAt: metadata.uploadedAt,
+          sizeBytes: metadata.sizeBytes
+        }
+      });
+    } catch (error) {
+      try { fs.rmSync(archivePath, { force: true }); } catch {}
+      console.error("[telementary] world backup save failed:", error.message);
+      return res.status(500).json({ ok: false, error: "could not save world backup" });
+    }
+  }
+);
+
+app.get("/api/worlds", (req, res) => {
+  if (!isMasterAuthorized(req)) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
+  const worlds = loadWorlds()
+    .map(({ id, deviceId, player, uuid, worldName, uploadedAt, sizeBytes }) => ({
+      id, deviceId, player, uuid: uuid || null, worldName, uploadedAt, sizeBytes
+    }))
+    .sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt));
+  return res.json({ ok: true, total: worlds.length, worlds });
+});
+
+app.get("/api/worlds/:id/download", (req, res) => {
+  if (!isMasterAuthorized(req)) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
+  const id = String(req.params.id || "");
+  const worlds = loadWorlds();
+  const world = worlds.find((entry) => entry.id === id);
+  if (!world || !/^[0-9a-f-]{36}$/i.test(world.id)) {
+    return res.status(404).json({ ok: false, error: "world backup not found" });
+  }
+  const archivePath = path.join(WORLD_DIR, world.archiveFile);
+  if (!fs.existsSync(archivePath)) {
+    return res.status(410).json({ ok: false, error: "world archive is no longer available" });
+  }
+  res.setHeader("Cache-Control", "no-store");
+  return res.download(archivePath, `${worldSlug(world.player)}-${worldSlug(world.worldName)}.zip`);
 });
 
 /* --------------------------------------------------------------- fallback */
