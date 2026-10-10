@@ -179,3 +179,25 @@ telementary/
 - [x] Fern-side uploader (HTTPS POST from the mod on join / leave / command / chat)
 - [x] `singlePlayerWorlds` + chat logs in the mod
 - [x] Local backup + viewer (`sync.js` → `local-data/viewer.html`)
+
+
+## Single-player world backup API
+
+World backups are separate ZIP archives, not the JSON world summaries in telemetry.
+
+- `POST /api/worlds` — device-token upload of a ZIP archive. Requires the
+  `X-World-Backup-Consent: true` header, plus `X-World-Name` and
+  `X-Minecraft-Username`. Send the raw ZIP bytes with
+  `Content-Type: application/zip`. Requests without explicit consent are rejected.
+- `GET /api/worlds` — master-token-only list of backup metadata.
+- `GET /api/worlds/:id/download` — master-token-only download of a ZIP archive.
+
+Device uploads are tied to the registering device token. The master token is
+never returned to mod clients. Downloads require the dashboard's master token;
+archive IDs are not public download credentials.
+
+**Railway persistence:** set `DATA_DIR` to a directory on a Railway persistent
+volume. The API stores archive files in `DATA_DIR/worlds` and metadata in
+`DATA_DIR/worlds.json`. Without a persistent volume, files may be lost when
+the service is redeployed or its container is replaced. World backups can be
+large; keep an appropriate volume quota and backup-retention policy.
